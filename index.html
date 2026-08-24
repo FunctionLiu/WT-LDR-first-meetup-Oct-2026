@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>Plan Your Visit 💌</title>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --cream: #FFF8F2;
+    --paper: #FFFDFA;
+    --blush: #FFD9E6;
+    --pink: #FF9EC0;
+    --coral: #FFB199;
+    --lavender: #E6DBFF;
+    --plum: #5B3A52;
+    --plum-soft: #8C6B82;
+  }
+  html, body { background: var(--cream); }
+  body { font-family: 'Quicksand', sans-serif; color: var(--plum); }
+  .font-display { font-family: 'Baloo 2', cursive; }
+
+  @keyframes floatY {
+    0%, 100% { transform: translateY(0px) rotate(var(--rot, 0deg)); }
+    50% { transform: translateY(-14px) rotate(var(--rot, 0deg)); }
+  }
+  .float-slow { animation: floatY 6s ease-in-out infinite; }
+  .float-med { animation: floatY 4.5s ease-in-out infinite; }
+  .float-fast { animation: floatY 3.2s ease-in-out infinite; }
+
+  @keyframes popIn {
+    0% { opacity: 0; transform: scale(0.85) translateY(10px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .pop-in { animation: popIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+  @keyframes dashMove { to { stroke-dashoffset: -24; } }
+  .dash-fly { stroke-dasharray: 6 6; animation: dashMove 1.2s linear infinite; }
+
+  .btn-bouncy { transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease; }
+  .btn-bouncy:hover { transform: translateY(-3px) scale(1.03); }
+  .btn-bouncy:active { transform: translateY(1px) scale(0.97); }
+
+  .scene-enter { animation: popIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+  .washi { position: absolute; height: 22px; opacity: 0.85; border-radius: 3px; }
+
+  ::selection { background: var(--blush); color: var(--plum); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .float-slow, .float-med, .float-fast, .dash-fly, .pop-in, .scene-enter { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState } = React;
+
+/* ============================================================
+   PLACEHOLDER IMAGE SYSTEM
+   Every value below is a label, not a real link yet. Replace any
+   "PASTE_..._HERE" string with a real sticker / GIF / photo URL
+   whenever you're ready — nothing will break in the meantime, it'll
+   just show a cute "sticker goes here" box with that label on it.
+   ============================================================ */
+const IMAGES = {
+  intro:               "1.png",
+  todo:                "2.jpg",
+  part2intro:           "3.gif",
+  daYungs:              "4.png",
+  tacoStand:            "5.jpg",
+  elGordo:              "6.jpg",
+  midwayMuseum:         "7.jpg",
+  balboaPark:           "8.jpg",
+  bostonLobster:        "9.jpg",
+  bayIslandCafe:        "10.jpg",
+  sgvTriedAndTrue:      "11.jpg",
+  torihei:              "12.jpg",
+  torranceTriedAndTrue: "13.jpg",
+  homePotato:           "14.jpg",
+  traceyCooking:        "15.jpg",
+  polaroidBook:         "16.jpg",
+  summary:              "17.gif",
+};
+
+/* Real map links Tracey already has — no need to touch these. */
+const MAPS = {
+  daYungs1: "https://share.google/30nVcjgQpROygPwhy",
+  daYungs2: "https://share.google/cWDYHWqMVG1jiVM1D",
+  bostonLobster: "https://maps.app.goo.gl/4j65BobM7BuBeJph6",
+  bayIslandCafe: "https://maps.app.goo.gl/L8m2rA4texm8ZguE6",
+  torihei: "https://maps.app.goo.gl/fP1BKkT7ktML8hMK7",
+};
+
+/* ============================================================
+   OCTOBER 2026 CALENDAR MATH
+   ============================================================ */
+const WEEKEND_SATURDAYS = [3, 10, 17, 24, 31].map(d => new Date(2026, 9, d));
+const WEEKEND_COLORS = ["var(--blush)", "var(--lavender)", "var(--coral)"];
+
+function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+function buildWeekend(sat) {
+  return { thu: addDays(sat, -2), fri: addDays(sat, -1), sat, sun: addDays(sat, 1), mon: addDays(sat, 2) };
+}
+const WEEKENDS = WEEKEND_SATURDAYS.map(buildWeekend);
+
+function fmt(date) {
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+function findWeekendIndex(date) {
+  return WEEKENDS.findIndex(w =>
+    [w.thu, w.fri, w.sat, w.sun, w.mon].some(d => d.toDateString() === date.toDateString())
+  );
+}
+const gridStart = (() => {
+  const d = new Date(2026, 9, 1);
+  d.setDate(d.getDate() - d.getDay());
+  return d;
+})();
+const CALENDAR_CELLS = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+
+/* ============================================================
+   SHARED UI PIECES
+   ============================================================ */
+function StickerFrame({ src, alt, tapeColor = "var(--pink)", size = "md" }) {
+  const isPlaceholder = !src || src.startsWith("PASTE_");
+  const sizes = {
+    xs: "w-14 h-14 shrink-0",
+    sm: "w-40 h-40",
+    md: "w-56 h-56 sm:w-64 sm:h-64",
+    lg: "w-64 h-64 sm:w-72 sm:h-72",
+  };
+  return (
+    <div className="relative inline-block pop-in">
+      {size !== "xs" && (
+        <React.Fragment>
+          <div className="washi -top-2 -left-3 w-10 rotate-[-8deg]" style={{ background: tapeColor }} />
+          <div className="washi -top-2 -right-3 w-10 rotate-[8deg]" style={{ background: tapeColor }} />
+        </React.Fragment>
+      )}
+      <div
+        className={`${sizes[size]} bg-white rounded-2xl shadow-lg shadow-pink-200/60 border-4 border-white ${size === "xs" ? "p-1" : "p-2"} flex items-center justify-center overflow-hidden`}
+        style={{ boxShadow: "0 10px 26px -10px rgba(255,158,192,0.45)" }}
+      >
+        {isPlaceholder ? (
+          <div
+            className={`w-full h-full rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-center gap-0.5 ${size === "xs" ? "px-1" : "px-3"}`}
+            style={{ borderColor: "var(--pink)", background: "var(--blush)" }}
+          >
+            <span className={size === "xs" ? "text-base" : "text-3xl"}>🩷</span>
+            {size !== "xs" && <span className="font-display text-sm" style={{ color: "var(--plum)" }}>sticker goes here</span>}
+            <span className={`opacity-70 break-all ${size === "xs" ? "text-[8px]" : "text-[11px]"}`}>{src}</span>
+          </div>
+        ) : (
+          <img src={src} alt={alt} className="w-full h-full object-cover rounded-xl" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FloatingBits() {
+  const bits = [
+    { emoji: "💌", top: "8%", left: "6%", cls: "float-slow", size: "text-3xl", rot: "-10deg" },
+    { emoji: "✨", top: "16%", left: "88%", cls: "float-fast", size: "text-2xl", rot: "12deg" },
+    { emoji: "🩷", top: "78%", left: "10%", cls: "float-med", size: "text-2xl", rot: "-6deg" },
+    { emoji: "⭐", top: "70%", left: "90%", cls: "float-slow", size: "text-2xl", rot: "8deg" },
+    { emoji: "🎀", top: "4%", left: "48%", cls: "float-med", size: "text-2xl", rot: "-4deg" },
+  ];
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {bits.map((b, i) => (
+        <span key={i} className={`absolute ${b.cls} ${b.size}`} style={{ top: b.top, left: b.left, "--rot": b.rot }}>
+          {b.emoji}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function DistanceMotif() {
+  return (
+    <svg viewBox="0 0 300 60" className="w-56 sm:w-64 mx-auto opacity-90">
+      <text x="6" y="38" fontSize="26">💗</text>
+      <path d="M40 40 Q150 -10 260 40" fill="none" stroke="var(--pink)" strokeWidth="2.5" className="dash-fly" />
+      <text x="252" y="38" fontSize="26">💗</text>
+      <text x="140" y="20" fontSize="18">✈️</text>
+    </svg>
+  );
+}
+
+function BouncyButton({ children, onClick, variant = "primary", disabled = false }) {
+  const styles = {
+    primary: { background: disabled ? "#F3D9E4" : "var(--pink)", color: "white" },
+    secondary: { background: "white", color: "var(--plum)", border: "2px solid var(--pink)" },
+  };
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      className={`btn-bouncy font-display text-base sm:text-lg px-6 py-3 rounded-full shadow-md w-full sm:w-auto ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+      style={{ ...styles[variant], boxShadow: "0 8px 20px -6px rgba(255,158,192,0.5)" }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Eyebrow({ children }) {
+  return (
+    <span
+      className="font-display text-[11px] tracking-wide uppercase px-3 py-1 rounded-full"
+      style={{ background: "var(--blush)", color: "var(--plum)" }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function PickCard({ selected, onClick, image, label, tapeColor, badge, mapHref }) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={e => (e.key === "Enter" || e.key === " ") && onClick()}
+      className="btn-bouncy w-full flex items-center gap-3 p-3 rounded-2xl border-2 text-left cursor-pointer"
+      style={{
+        borderColor: selected ? "var(--pink)" : "var(--blush)",
+        background: selected ? "#FFF1F6" : "white",
+        boxShadow: "0 6px 16px -8px rgba(255,158,192,0.4)",
+      }}
+    >
+      {image && <StickerFrame src={image} alt={label} size="xs" tapeColor={tapeColor} />}
+      <span className="flex-1">
+        <span className="font-display text-sm sm:text-base block">{label}</span>
+        {badge && <span className="text-[11px] opacity-70 block">{badge}</span>}
+        {mapHref && (
+          <a
+            href={mapHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="text-[11px] underline"
+            style={{ color: "var(--pink)" }}
+          >
+            📍 view on map
+          </a>
+        )}
+      </span>
+      {selected && <span className="text-lg">💗</span>}
+    </div>
+  );
+}
+
+function Shell({ children }) {
+  return (
+    <div
+      className="min-h-screen w-full flex items-center justify-center px-4 py-10 relative overflow-hidden"
+      style={{ background: "radial-gradient(circle at 20% 20%, var(--blush) 0%, var(--cream) 55%)" }}
+    >
+      <FloatingBits />
+      <div className="relative w-full max-w-md">{children}</div>
+    </div>
+  );
+}
+
+function Card({ children, onBack }) {
+  return (
+    <div
+      className="scene-enter rounded-[2rem] p-6 sm:p-8 text-center flex flex-col items-center gap-4 relative"
+      style={{ background: "var(--paper)", boxShadow: "0 20px 45px -15px rgba(255, 158, 192, 0.4)", border: "3px solid var(--blush)" }}
+    >
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="absolute top-4 left-4 text-sm font-display opacity-60 hover:opacity-100 transition"
+          style={{ color: "var(--plum)" }}
+        >
+          ‹ back
+        </button>
+      )}
+      {children}
+    </div>
+  );
+}
+
+/* ============================================================
+   PART 1 — PICK THE VISIT
+   ============================================================ */
+function Intro({ onNext }) {
+  return (
+    <Card>
+      <DistanceMotif />
+      <h1 className="font-display text-3xl sm:text-4xl">Plan Your Visit</h1>
+      <StickerFrame src={IMAGES.intro} alt="intro sticker" tapeColor="var(--coral)" />
+      <p className="text-sm sm:text-base leading-relaxed">
+        Hii 🥹 let's figure out when you're coming and what we'll get up to.
+        First: pick your dates. Then: pick our plans. Ready?
+      </p>
+      <BouncyButton onClick={onNext}>Let's plan 🎀</BouncyButton>
+    </Card>
+  );
+}
+
+function CalendarScreen({ selectedWeekend, onSelectWeekend, onNext, onBack }) {
+  return (
+    <Card onBack={onBack}>
+      <Eyebrow>part one · pick your weekend</Eyebrow>
+      <h2 className="font-display text-2xl">October 2026</h2>
+      <p className="text-xs sm:text-sm opacity-80">Tap the weekend you're thinking of visiting 🗓️</p>
+
+      <div className="w-full">
+        <div className="grid grid-cols-7 gap-1 text-[10px] font-display mb-1 opacity-60">
+          {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i}>{d}</div>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {CALENDAR_CELLS.map((date, i) => {
+            const inMonth = date.getMonth() === 9;
+            const wIdx = findWeekendIndex(date);
+            const isSelected = wIdx !== -1 && wIdx === selectedWeekend;
+            const clickable = wIdx !== -1;
+            return (
+              <button
+                key={i}
+                disabled={!clickable}
+                onClick={() => clickable && onSelectWeekend(wIdx)}
+                className={`aspect-square rounded-lg text-[11px] sm:text-xs flex items-center justify-center btn-bouncy ${!inMonth ? "opacity-35" : ""} ${clickable ? "" : "cursor-default"}`}
+                style={{
+                  background: wIdx !== -1 ? WEEKEND_COLORS[wIdx % 3] : "transparent",
+                  border: isSelected ? "2px solid var(--pink)" : "2px solid transparent",
+                  transform: isSelected ? "scale(1.08)" : "scale(1)",
+                  fontWeight: isSelected ? 700 : 500,
+                }}
+              >
+                {date.getDate()}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="text-[11px] opacity-60">colored blocks = possible weekends. next step you'll pick the exact days.</p>
+      <BouncyButton onClick={onNext} disabled={selectedWeekend === null}>Continue →</BouncyButton>
+    </Card>
+  );
+}
+
+function DateRangeScreen({ weekendIdx, dateRange, onSelectRange, onNext, onBack }) {
+  const w = WEEKENDS[weekendIdx];
+  const options = [
+    { key: "thu-sun", label: `${fmt(w.thu)} – ${fmt(w.sun)}`, sub: "Thursday to Sunday · 4 days" },
+    { key: "thu-mon", label: `${fmt(w.thu)} – ${fmt(w.mon)}`, sub: "Thursday to Monday · 5 days" },
+    { key: "fri-sun", label: `${fmt(w.fri)} – ${fmt(w.sun)}`, sub: "Friday to Sunday · 3 days" },
+    { key: "fri-mon", label: `${fmt(w.fri)} – ${fmt(w.mon)}`, sub: "Friday to Monday · 4 days" },
+  ];
+  return (
+    <Card onBack={onBack}>
+      <Eyebrow>part one · pick your exact days</Eyebrow>
+      <h2 className="font-display text-2xl">How long can you stay? 🥹</h2>
+      <div className="flex flex-col gap-3 w-full">
+        {options.map(opt => (
+          <PickCard
+            key={opt.key}
+            selected={dateRange === opt.key}
+            onClick={() => onSelectRange(opt.key)}
+            label={opt.label}
+            badge={opt.sub}
+          />
+        ))}
+      </div>
+      <BouncyButton onClick={onNext} disabled={!dateRange}>Continue →</BouncyButton>
+    </Card>
+  );
+}
+
+const TODO_ITEMS = [
+  { key: "flight", label: "Book your flight ✈️" },
+  { key: "pack", label: "Pack (don't forget chargers!) 🧳" },
+  { key: "details", label: "Send me your flight details 📲" },
+  { key: "countdown", label: "Start the countdown with me 💕" },
+];
+
+function TodoScreen({ weekendIdx, dateRange, checked, onToggle, onNext, onBack }) {
+  const w = WEEKENDS[weekendIdx];
+  const rangeMap = {
+    "thu-sun": [w.thu, w.sun],
+    "thu-mon": [w.thu, w.mon],
+    "fri-sun": [w.fri, w.sun],
+    "fri-mon": [w.fri, w.mon],
+  };
+  const [start, end] = rangeMap[dateRange];
+  return (
+    <Card onBack={onBack}>
+      <Eyebrow>part one · the plan</Eyebrow>
+      <h2 className="font-display text-2xl">
+        {fmt(start)} – {fmt(end)}, 2026 🎉
+      </h2>
+      <StickerFrame src={IMAGES.todo} alt="to-do sticker" tapeColor="var(--lavender)" />
+      <p className="text-sm">Okay, dates are locked in! Here's our little to-do list before you get here:</p>
+      <div className="flex flex-col gap-2 w-full text-left">
+        {TODO_ITEMS.map(item => (
+          <label
+            key={item.key}
+            className="flex items-center gap-3 p-3 rounded-2xl bg-white border-2"
+            style={{ borderColor: "var(--blush)" }}
+          >
+            <input
+              type="checkbox"
+              checked={!!checked[item.key]}
+              onChange={() => onToggle(item.key)}
+              className="w-5 h-5 accent-pink-400"
+            />
+            <span className={`text-sm font-display ${checked[item.key] ? "line-through opacity-50" : ""}`}>
+              {item.label}
+            </span>
+          </label>
+        ))}
+      </div>
+      <BouncyButton onClick={onNext}>Now let's plan the fun part →</BouncyButton>
+    </Card>
+  );
+}
+
+/* ============================================================
+   PART 2 — PICK OUR PLANS
+   ============================================================ */
+function Part2Intro({ onPick, onBack }) {
+  return (
+    <Card onBack={onBack}>
+      <Eyebrow>part two · pick a vibe</Eyebrow>
+      <h2 className="font-display text-2xl sm:text-3xl">Pick today's vibe 🎲</h2>
+      <StickerFrame src={IMAGES.part2intro} alt="part two sticker" tapeColor="var(--pink)" />
+      <p className="text-sm leading-relaxed">
+        One pick per round — you can always play again for a different vibe 💕
+      </p>
+      <div className="flex flex-col gap-3 w-full">
+        <BouncyButton onClick={() => onPick("sunny")}>☀️ Sunny</BouncyButton>
+        <BouncyButton onClick={() => onPick("yummy")}>🍡 Yummy</BouncyButton>
+        <BouncyButton onClick={() => onPick("cozy")}>🧸 Cozy</BouncyButton>
+      </div>
+    </Card>
+  );
+}
+
+function SanDiegoScreen({ taco, onTaco, activity, onActivity, zoo, onZoo, onNext, onBack }) {
+  return (
+    <Card onBack={onBack}>
+      <Eyebrow>plan · san diego day trip</Eyebrow>
+      <h2 className="font-display text-2xl">Boba, tacos & a museum/park</h2>
+
+      <div className="w-full text-left flex flex-col gap-2">
+        <p className="font-display text-xs uppercase tracking-wide opacity-60">boba stop (already decided!)</p>
+        <div className="flex items-center gap-3 p-3 rounded-2xl bg-white border-2" style={{ borderColor: "var(--blush)" }}>
+          <StickerFrame src={IMAGES.daYungs} alt="Da Yung's" size="xs" tapeColor="var(--coral)" />
+          <span className="flex-1">
+            <span className="font-display text-sm block">Da Yung's 🧋</span>
+            <span className="flex gap-3 mt-0.5">
+              <a href={MAPS.daYungs1} target="_blank" rel="noopener noreferrer" className="text-[11px] underline" style={{ color: "var(--pink)" }}>📍 Location 1</a>
+              <a href={MAPS.daYungs2} target="_blank" rel="noopener noreferrer" className="text-[11px] underline" style={{ color: "var(--pink)" }}>📍 Location 2</a>
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div className="w-full text-left flex flex-col gap-2">
+        <p className="font-display text-xs uppercase tracking-wide opacity-60">pick the tacos</p>
+        <PickCard selected={taco === "tacoStand"} onClick={() => onTaco("tacoStand")} image={IMAGES.tacoStand} label="Taco Stand 🌮" tapeColor="var(--pink)" />
+        <PickCard selected={taco === "elGordo"} onClick={() => onTaco("elGordo")} image={IMAGES.elGordo} label="El Gordo 🌮" tapeColor="var(--coral)" />
+      </div>
+
+      <div className="w-full text-left flex flex-col gap-2">
+        <p className="font-display text-xs uppercase tracking-wide opacity-60">pick the activity</p>
+        <PickCard selected={activity === "midway"} onClick={() => onActivity("midway")} image={IMAGES.midwayMuseum} label="Midway Museum 🚢" tapeColor="var(--lavender)" badge="Tracey's already been — happy to go again!" />
+        <PickCard selected={activity === "balboa"} onClick={() => onActivity("balboa")} image={IMAGES.balboaPark} label="Balboa Park 🌳" tapeColor="var(--pink)" />
+      </div>
+
+      {activity === "balboa" && (
+        <div className="w-full text-left flex flex-col gap-2 pop-in">
+          <p className="font-display text-xs uppercase tracking-wide opacity-60">include the zoo? (still tbd together)</p>
+          <div className="flex gap-2">
+            <BouncyButton variant={zoo === true ? "primary" : "secondary"} onClick={() => onZoo(true)}>With zoo 🦁</BouncyButton>
+            <BouncyButton variant={zoo === false ? "primary" : "secondary"} onClick={() => onZoo(false)}>Skip it</BouncyButton>
+          </div>
+        </div>
+      )}
+
+      <BouncyButton onClick={onNext} disabled={!taco || !activity}>Continue →</BouncyButton>
+    </Card>
+  );
+}
+
+function SuggestSpotInput({ value, onChange, placeholder }) {
+  return (
+    <div className="w-full pop-in flex flex-col gap-1">
+      <p className="text-[11px] opacity-70">
+        Name the place or drop a link — either works, and it helps me make a reservation ahead 🥰
+      </p>
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full p-3 rounded-2xl border-2 text-sm"
+        style={{ borderColor: "var(--blush)" }}
+      />
+    </div>
+  );
+}
+
+function FoodTripScreen({ sgv, onSgv, sgvCustom, onSgvCustom, torrance, onTorrance, torranceCustom, onTorranceCustom, onNext, onBack }) {
+  return (
+    <Card onBack={onBack}>
+      <Eyebrow>plan · sgv & torrance eating tour</Eyebrow>
+      <h2 className="font-display text-2xl">Two days, two food crawls 🍜</h2>
+
+      <div className="w-full text-left flex flex-col gap-2">
+        <p className="font-display text-xs uppercase tracking-wide opacity-60">SGV pick</p>
+        <PickCard selected={sgv === "bostonLobster"} onClick={() => onSgv("bostonLobster")} image={IMAGES.bostonLobster} label="Boston Lobster Seafood Restaurant 🦞" tapeColor="var(--pink)" mapHref={MAPS.bostonLobster} />
+        <PickCard selected={sgv === "bayIslandCafe"} onClick={() => onSgv("bayIslandCafe")} image={IMAGES.bayIslandCafe} label="Bay Island Cafe ☕" tapeColor="var(--lavender)" mapHref={MAPS.bayIslandCafe} />
+        <PickCard selected={sgv === "tried"} onClick={() => onSgv("tried")} image={IMAGES.sgvTriedAndTrue} label="Somewhere we've been 😍" tapeColor="var(--coral)" badge="or somewhere brand new — up to you!" />
+        {sgv === "tried" && (
+          <SuggestSpotInput value={sgvCustom} onChange={onSgvCustom} placeholder="place name or link..." />
+        )}
+      </div>
+
+      <div className="w-full text-left flex flex-col gap-2">
+        <p className="font-display text-xs uppercase tracking-wide opacity-60">Torrance pick</p>
+        <PickCard selected={torrance === "torihei"} onClick={() => onTorrance("torihei")} image={IMAGES.torihei} label="Torihei | Yakitori Robata Dining 🍢" tapeColor="var(--pink)" mapHref={MAPS.torihei} />
+        <PickCard selected={torrance === "tried"} onClick={() => onTorrance("tried")} image={IMAGES.torranceTriedAndTrue} label="Somewhere we've been 😍" tapeColor="var(--coral)" badge="or somewhere brand new — up to you!" />
+        {torrance === "tried" && (
+          <SuggestSpotInput value={torranceCustom} onChange={onTorranceCustom} placeholder="place name or link..." />
+        )}
+      </div>
+
+      <BouncyButton onClick={onNext} disabled={!sgv || !torrance}>Continue →</BouncyButton>
+    </Card>
+  );
+}
+
+function HomeDayScreen({ craving, onCraving, onNext, onBack }) {
+  return (
+    <Card onBack={onBack}>
+      <Eyebrow>plan · home day</Eyebrow>
+      <h2 className="font-display text-2xl">A whole day of doing nothing 🥔</h2>
+      <p className="text-sm opacity-80">Finally, a day where we just rest together 🛌</p>
+
+      <div className="w-full flex flex-col gap-3 text-left">
+        <div className="flex items-center gap-3 p-3 rounded-2xl bg-white border-2" style={{ borderColor: "var(--blush)" }}>
+          <StickerFrame src={IMAGES.homePotato} alt="Badly in Love" size="xs" tapeColor="var(--lavender)" />
+          <span className="font-display text-sm">Potato-watching Badly in Love (+ whatever else we queue up) 🎬</span>
+        </div>
+        <div className="flex flex-col gap-2 p-3 rounded-2xl bg-white border-2" style={{ borderColor: "var(--blush)" }}>
+          <div className="flex items-center gap-3">
+            <StickerFrame src={IMAGES.traceyCooking} alt="Tracey cooking" size="xs" tapeColor="var(--pink)" />
+            <span className="font-display text-sm">Tracey's home cooking — craving anything? 🍳</span>
+          </div>
+          <input
+            type="text"
+            value={craving}
+            onChange={e => onCraving(e.target.value)}
+            placeholder="tell me if there's something you're craving..."
+            className="w-full p-3 rounded-2xl border-2 text-sm"
+            style={{ borderColor: "var(--blush)" }}
+          />
+        </div>
+        <div className="flex items-center gap-3 p-3 rounded-2xl bg-white border-2" style={{ borderColor: "var(--blush)" }}>
+          <StickerFrame src={IMAGES.polaroidBook} alt="Polaroid book" size="xs" tapeColor="var(--coral)" />
+          <span className="font-display text-sm">Working on our polaroid book — we've got new pics to add 📸</span>
+        </div>
+      </div>
+
+      <BouncyButton onClick={onNext}>Sounds perfect 🥰</BouncyButton>
+    </Card>
+  );
+}
+
+const LABELS = {
+  tacoStand: "Taco Stand 🌮",
+  elGordo: "El Gordo 🌮",
+  midway: "Midway Museum 🚢",
+  balboa: "Balboa Park 🌳",
+  bostonLobster: "Boston Lobster Seafood Restaurant 🦞",
+  bayIslandCafe: "Bay Island Cafe ☕",
+  torihei: "Torihei | Yakitori Robata Dining 🍢",
+};
+
+function spotLabel(choice, custom) {
+  if (choice === "tried") return custom ? custom : "Somewhere we've been (TBD together)";
+  return LABELS[choice];
+}
+
+function SummaryScreen({ weekendIdx, dateRange, chosenVibe, taco, activity, zoo, sgv, sgvCustom, torrance, torranceCustom, craving, onRestart, onBack }) {
+  const w = WEEKENDS[weekendIdx];
+  const rangeMap = {
+    "thu-sun": [w.thu, w.sun],
+    "thu-mon": [w.thu, w.mon],
+    "fri-sun": [w.fri, w.sun],
+    "fri-mon": [w.fri, w.mon],
+  };
+  const [start, end] = rangeMap[dateRange];
+  return (
+    <Card onBack={onBack}>
+      <Eyebrow>the plan 💗</Eyebrow>
+      <h2 className="font-display text-2xl sm:text-3xl">
+        {fmt(start)} – {fmt(end)}, 2026
+      </h2>
+      <StickerFrame src={IMAGES.summary} alt="summary sticker" tapeColor="var(--pink)" size="lg" />
+
+      <div className="w-full text-left text-sm flex flex-col gap-2 bg-white rounded-2xl p-4 border-2" style={{ borderColor: "var(--blush)" }}>
+        {chosenVibe === "sunny" && (
+          <p>
+            <span className="font-display">☀️ San Diego day:</span> Da Yung's + {LABELS[taco]} + {LABELS[activity]}
+            {activity === "balboa" && zoo !== null ? (zoo ? " (with the zoo!)" : " (skipping the zoo)") : ""}
+          </p>
+        )}
+        {chosenVibe === "yummy" && (
+          <p>
+            <span className="font-display">🍡 SGV & Torrance:</span> {spotLabel(sgv, sgvCustom)} & {spotLabel(torrance, torranceCustom)}
+          </p>
+        )}
+        {chosenVibe === "cozy" && (
+          <p>
+            <span className="font-display">🧸 Home day:</span> Badly in Love + our polaroid book
+            {craving ? ` + Tracey's cooking (craving: ${craving})` : " + Tracey's cooking"}
+          </p>
+        )}
+      </div>
+
+      <p className="text-sm leading-relaxed">
+        I can't wait to have you here for this. Go finish that to-do list,
+        book your flight, and let's count down together 🩷
+      </p>
+      <BouncyButton onClick={onRestart}>Play again — try another vibe 🔁</BouncyButton>
+    </Card>
+  );
+}
+
+/* ============================================================
+   APP
+   ============================================================ */
+function App() {
+  const [history, setHistory] = useState(["intro"]);
+  const stage = history[history.length - 1];
+  const goTo = next => setHistory(h => [...h, next]);
+  const goBack = () => setHistory(h => (h.length > 1 ? h.slice(0, -1) : h));
+
+  const [weekendIdx, setWeekendIdx] = useState(null);
+  const [dateRange, setDateRange] = useState(null);
+  const [checked, setChecked] = useState({});
+  const [chosenVibe, setChosenVibe] = useState(null);
+  const [taco, setTaco] = useState(null);
+  const [activity, setActivity] = useState(null);
+  const [zoo, setZoo] = useState(null);
+  const [sgv, setSgv] = useState(null);
+  const [sgvCustom, setSgvCustom] = useState("");
+  const [torrance, setTorrance] = useState(null);
+  const [torranceCustom, setTorranceCustom] = useState("");
+  const [craving, setCraving] = useState("");
+
+  const toggleTodo = key => setChecked(c => ({ ...c, [key]: !c[key] }));
+
+  const pickVibe = vibe => {
+    setChosenVibe(vibe);
+    const nextStage = vibe === "sunny" ? "sandiego" : vibe === "yummy" ? "foodtrip" : "homeday";
+    goTo(nextStage);
+  };
+
+  const restart = () => {
+    setHistory(["intro"]);
+    setWeekendIdx(null);
+    setDateRange(null);
+    setChecked({});
+    setChosenVibe(null);
+    setTaco(null);
+    setActivity(null);
+    setZoo(null);
+    setSgv(null);
+    setSgvCustom("");
+    setTorrance(null);
+    setTorranceCustom("");
+    setCraving("");
+  };
+
+  return (
+    <Shell>
+      {stage === "intro" && <Intro onNext={() => goTo("calendar")} />}
+
+      {stage === "calendar" && (
+        <CalendarScreen
+          selectedWeekend={weekendIdx}
+          onSelectWeekend={setWeekendIdx}
+          onNext={() => goTo("daterange")}
+          onBack={goBack}
+        />
+      )}
+
+      {stage === "daterange" && (
+        <DateRangeScreen
+          weekendIdx={weekendIdx}
+          dateRange={dateRange}
+          onSelectRange={setDateRange}
+          onNext={() => goTo("todo")}
+          onBack={goBack}
+        />
+      )}
+
+      {stage === "todo" && (
+        <TodoScreen
+          weekendIdx={weekendIdx}
+          dateRange={dateRange}
+          checked={checked}
+          onToggle={toggleTodo}
+          onNext={() => goTo("part2intro")}
+          onBack={goBack}
+        />
+      )}
+
+      {stage === "part2intro" && <Part2Intro onPick={pickVibe} onBack={goBack} />}
+
+      {stage === "sandiego" && (
+        <SanDiegoScreen
+          taco={taco} onTaco={setTaco}
+          activity={activity} onActivity={setActivity}
+          zoo={zoo} onZoo={setZoo}
+          onNext={() => goTo("summary")}
+          onBack={goBack}
+        />
+      )}
+
+      {stage === "foodtrip" && (
+        <FoodTripScreen
+          sgv={sgv} onSgv={setSgv} sgvCustom={sgvCustom} onSgvCustom={setSgvCustom}
+          torrance={torrance} onTorrance={setTorrance} torranceCustom={torranceCustom} onTorranceCustom={setTorranceCustom}
+          onNext={() => goTo("summary")}
+          onBack={goBack}
+        />
+      )}
+
+      {stage === "homeday" && (
+        <HomeDayScreen craving={craving} onCraving={setCraving} onNext={() => goTo("summary")} onBack={goBack} />
+      )}
+
+      {stage === "summary" && (
+        <SummaryScreen
+          weekendIdx={weekendIdx} dateRange={dateRange} chosenVibe={chosenVibe}
+          taco={taco} activity={activity} zoo={zoo}
+          sgv={sgv} sgvCustom={sgvCustom}
+          torrance={torrance} torranceCustom={torranceCustom}
+          craving={craving}
+          onRestart={restart}
+          onBack={goBack}
+        />
+      )}
+
+      <p className="text-center text-[11px] mt-6 opacity-50 font-display">
+        made with 🩷 for you, from wherever I am
+      </p>
+    </Shell>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
